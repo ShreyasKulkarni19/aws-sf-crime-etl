@@ -1,4 +1,5 @@
 import json
+from unicodedata import category
 import boto3
 import logging
 import os
@@ -174,6 +175,10 @@ def lambda_handler(event, context):
                 f"month={str(month).zfill(2)}/"
                 f"day={str(day).zfill(2)}/"
             )
+
+            if category is None or category == "":
+                logger.warning(f"Skipping record with missing category: {record}")
+                continue
 
             safe_category = category.replace(" ", "_")
             filename = f"{safe_category}-{year}-{str(month).zfill(2)}-{str(day).zfill(2)}-{uuid.uuid4().hex}.json"
