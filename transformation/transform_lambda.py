@@ -73,14 +73,24 @@ def transform_record(record):
     dt = parse_datetime(record.get("incident_datetime"))
     if not dt:
         return None
+    
+    report_dt = parse_datetime(record.get("report_datetime"))
+    if report_dt:
+        transformed["report_date"] = report_dt.date().isoformat()
+        transformed["report_time"] = report_dt.strftime("%H:%M:%S")
 
-    lat = record.get("latitude")
-    lon = record.get("longitude")
-    if lat is None or lon is None:
+    # Convert lat/lon to float
+    try:
+        lat = float(record.get("latitude"))
+        lon = float(record.get("longitude"))
+    except (TypeError, ValueError):
         return None
 
     # ---- Start with full original record ----
     transformed = record.copy()
+
+    transformed.pop("incident_datetime", None)
+    transformed.pop("report_datetime", None)
 
     # ---- Normalize categorical columns ----
     text_fields = [
@@ -100,13 +110,25 @@ def transform_record(record):
         transformed[field] = normalize_text(record.get(field))
 
     # ---- Add derived datetime features ----
-    transformed["incident_year"] = dt.year
-    transformed["incident_month"] = dt.month
-    transformed["incident_day"] = dt.day
-    transformed["incident_hour"] = dt.hour
-    transformed["incident_quarter"] = (dt.month - 1) // 3 + 1
-    transformed["incident_day_of_week"] = dt.strftime("%A").upper()
+    transformed["incident_date"] = dt.date().isoformat()
+    transformed["incident_time"] = dt.strftime("%H:%M:%S")
+    transformed["incident_year"] = int(dt.year)
+    transformed["incident_month"] = int(dt.month)
+    transformed["incident_day"] = int(dt.day)
+    transformed["incident_hour"] = int(dt.hour)
+    transformed["incident_quarter"] = int((dt.month - 1) // 3 + 1)
+    transformed["incident_day_of_week"] = dt.strftime("%A")
     transformed["is_weekend"] = dt.weekday() >= 5
+
+    try:
+        transformed["supervisor_district"] = int(record.get("supervisor_district")) if record.get("supervisor_district") else None
+    except:
+        transformed["supervisor_district"] = None
+
+    try:
+        transformed["supervisor_district_2012"] = int(record.get("supervisor_district_2012")) if record.get("supervisor_district_2012") else None
+    except:
+        transformed["supervisor_district_2012"] = None
 
     # ---- Business enrichment ----
     category = transformed.get("incident_category") or "UNKNOWN"
