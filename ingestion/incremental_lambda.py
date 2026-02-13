@@ -1,7 +1,8 @@
 import json
 import boto3
-import requests
 import logging
+import urllib.request
+import urllib.parse
 import os
 from datetime import datetime
 
@@ -74,13 +75,17 @@ def lambda_handler(event, context):
         if last_loaded_at:
             params["$where"] = f"data_loaded_at > '{last_loaded_at}'"
 
-        response = requests.get(API_BASE_URL, params=params)
+        query_string = urllib.parse.urlencode(params)
+        url = f"{API_BASE_URL}?{query_string}"
 
-        if response.status_code != 200:
-            logger.error(f"API request failed: {response.text}")
-            raise Exception("API failure")
-
-        data = response.json()
+        try:
+            with urllib.request.urlopen(url) as response:
+                if response.status != 200:
+                    raise Exception(f"API returned status {response.status}")
+                data = json.loads(response.read().decode())
+        except Exception as e:
+            logger.error(f"API request failed: {str(e)}")
+            raise
 
         if not data:
             break
