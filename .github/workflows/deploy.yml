@@ -1,0 +1,35 @@
+name: Deploy Lambda
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::104633066728:role/github-lambda-deployer
+          aws-region: us-east-1
+
+      - name: Package backfill Lambda
+        run: |
+          cd ingestion
+          zip backfill.zip backfill_lambda.py
+
+      - name: Deploy backfill Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name sf-crime-backfill \
+            --zip-file fileb://ingestion/backfill.zip
