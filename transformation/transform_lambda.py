@@ -13,7 +13,6 @@ import uuid
 RAW_BUCKET = os.environ["RAW_BUCKET"]
 CURATED_BUCKET = os.environ["CURATED_BUCKET"]
 
-
 VIOLENT_CRIMES = {
     "HOMICIDE",
     "ASSAULT",
@@ -27,6 +26,28 @@ logger.setLevel(logging.INFO)
 
 s3 = boto3.client("s3")
 
+# ----------------------------
+# Idempotency Helpers
+# ----------------------------
+
+def already_processed(raw_key):
+    marker_key = f"processed/{raw_key.split('/')[-1]}.done"
+    try:
+        s3.head_object(Bucket=CURATED_BUCKET, Key=marker_key)
+        logger.info(f"Marker exists: {marker_key}")
+        return True
+    except s3.exceptions.ClientError:
+        return False
+
+
+def write_marker(raw_key):
+    marker_key = f"processed/{raw_key.split('/')[-1]}.done"
+    s3.put_object(
+        Bucket=CURATED_BUCKET,
+        Key=marker_key,
+        Body=b""
+    )
+    logger.info(f"Marker written: {marker_key}")
 
 # ----------------------------
 # Helper Functions
@@ -35,7 +56,7 @@ s3 = boto3.client("s3")
 def normalize_text(value):
     if not value:
         return None
-    return str(value).strip().upper().replace(" ", "_")
+    return str(value).strip()
 
 
 def parse_datetime(dt_string):
@@ -52,35 +73,45 @@ def transform_record(record):
     if not dt:
         return None
 
-
-    # Require lat/lon
     lat = record.get("latitude")
     lon = record.get("longitude")
     if lat is None or lon is None:
         return None
 
-    category = normalize_text(record.get("incident_category")) or "UNKNOWN"
+    # ---- Start with full original record ----
+    transformed = record.copy()
 
-    transformed = {
-        "incident_id": record.get("incident_id"),
-        "incident_datetime": record.get("incident_datetime"),
-        "incident_year": dt.year,
-        "incident_month": dt.month,
-        "incident_day": dt.day,
-        "incident_hour": dt.hour,
-        "incident_quarter": (dt.month - 1) // 3 + 1,
-        "incident_day_of_week": dt.strftime("%A").upper(),
-        "is_weekend": dt.weekday() >= 5,
-        "incident_category": category,
-        "incident_subcategory": normalize_text(record.get("incident_subcategory")),
-        "resolution": normalize_text(record.get("resolution")),
-        "police_district": normalize_text(record.get("police_district")),
-        "analysis_neighborhood": normalize_text(record.get("analysis_neighborhood")),
-        "latitude": lat,
-        "longitude": lon,
-        "is_violent_crime": category in VIOLENT_CRIMES,
-        "is_peak_hour": 17 <= dt.hour <= 21
-    }
+    # ---- Normalize categorical columns ----
+    text_fields = [
+        "incident_category",
+        "incident_subcategory",
+        "incident_description",
+        "resolution",
+        "police_district",
+        "analysis_neighborhood",
+        "supervisor_district",
+        "supervisor_district_2012",
+        "report_type_code",
+        "report_type_description"
+    ]
+
+    for field in text_fields:
+        transformed[field] = normalize_text(record.get(field))
+
+    # ---- Add derived datetime features ----
+    transformed["incident_year"] = dt.year
+    transformed["incident_month"] = dt.month
+    transformed["incident_day"] = dt.day
+    transformed["incident_hour"] = dt.hour
+    transformed["incident_quarter"] = (dt.month - 1) // 3 + 1
+    transformed["incident_day_of_week"] = dt.strftime("%A").upper()
+    transformed["is_weekend"] = dt.weekday() >= 5
+
+    # ---- Business enrichment ----
+    category = transformed.get("incident_category") or "UNKNOWN"
+
+    transformed["is_violent_crime"] = category in VIOLENT_CRIMES
+    transformed["is_peak_hour"] = 17 <= dt.hour <= 21
 
     return transformed
 
@@ -93,12 +124,21 @@ def lambda_handler(event, context):
 
     logger.info("Transform Lambda triggered")
 
+    if "Records" not in event:
+        logger.warning("No S3 records found in event")
+        return {"statusCode": 400}
+
     for s3_record in event["Records"]:
 
         bucket = s3_record["s3"]["bucket"]["name"]
         key = s3_record["s3"]["object"]["key"]
 
         logger.info(f"Processing raw file: {key}")
+
+        # ---- Idempotency Check ----
+        if already_processed(key):
+            logger.info("File already processed. Skipping.")
+            continue
 
         response = s3.get_object(Bucket=bucket, Key=key)
         raw_data = json.loads(response["Body"].read())
@@ -126,7 +166,7 @@ def lambda_handler(event, context):
             group_key = (year, month, day, category)
             grouped_records[group_key].append(transformed)
 
-        # Write grouped files
+        # ---- Write Curated Files ----
         for (year, month, day, category), records_list in grouped_records.items():
 
             partition_path = (
@@ -135,11 +175,8 @@ def lambda_handler(event, context):
                 f"day={str(day).zfill(2)}/"
             )
 
-            filename = (
-                f"{category}-"
-                f"{year}-{str(month).zfill(2)}-{str(day).zfill(2)}-"
-                f"{uuid.uuid4().hex}.json"
-            )
+            safe_category = category.replace(" ", "_")
+            filename = f"{safe_category}-{year}-{str(month).zfill(2)}-{str(day).zfill(2)}-{uuid.uuid4().hex}.json"
 
             curated_key = partition_path + filename
 
@@ -151,6 +188,9 @@ def lambda_handler(event, context):
             )
 
             logger.info(f"Wrote curated file: {curated_key}")
+
+        # ---- Write Marker After Successful Processing ----
+        write_marker(key)
 
     return {
         "statusCode": 200
