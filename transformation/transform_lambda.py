@@ -75,9 +75,6 @@ def transform_record(record):
         return None
     
     report_dt = parse_datetime(record.get("report_datetime"))
-    if report_dt:
-        transformed["report_date"] = report_dt.date().isoformat()
-        transformed["report_time"] = report_dt.strftime("%H:%M:%S")
 
     # Convert lat/lon to float
     try:
@@ -119,6 +116,9 @@ def transform_record(record):
     transformed["incident_quarter"] = int((dt.month - 1) // 3 + 1)
     transformed["incident_day_of_week"] = dt.strftime("%A")
     transformed["is_weekend"] = dt.weekday() >= 5
+    if report_dt:
+        transformed["report_date"] = report_dt.date().isoformat()
+        transformed["report_time"] = report_dt.strftime("%H:%M:%S")
 
     try:
         transformed["supervisor_district"] = int(record.get("supervisor_district")) if record.get("supervisor_district") else None
