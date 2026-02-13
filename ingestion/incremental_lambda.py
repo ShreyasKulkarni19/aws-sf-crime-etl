@@ -72,8 +72,17 @@ def lambda_handler(event, context):
             "$order": "data_loaded_at ASC"
         }
 
+        from datetime import timedelta
+
         if last_loaded_at:
-            params["$where"] = f"data_loaded_at > '{last_loaded_at}'"
+            where_clause = f"data_loaded_at > '{last_loaded_at}'"
+        else:
+            # First run fallback
+            fallback_time = (datetime.utcnow() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
+            where_clause = f"data_loaded_at > '{fallback_time}'"
+            logger.info(f"No checkpoint found. Defaulting to last 1 day from {fallback_time}")
+
+        params["$where"] = where_clause
 
         query_string = urllib.parse.urlencode(params)
         url = f"{API_BASE_URL}?{query_string}"
@@ -97,7 +106,15 @@ def lambda_handler(event, context):
             if ts and (not max_loaded_at or ts > max_loaded_at):
                 max_loaded_at = ts
 
-        all_records.extend(data)
+        timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
+        s3_key = f"incremental/{timestamp}_{offset}.json"
+
+        s3.put_object(
+            Bucket=RAW_BUCKET,
+            Key=s3_key,
+            Body=json.dumps(data),
+            ContentType="application/json"
+        )
         offset += BATCH_SIZE
 
         if len(data) < BATCH_SIZE:
