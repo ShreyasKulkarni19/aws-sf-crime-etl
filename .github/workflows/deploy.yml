@@ -44,3 +44,17 @@ jobs:
           aws lambda update-function-code \
             --function-name sf-crime-transform \
             --zip-file fileb://transformation/transform.zip
+
+      # ----------------------------
+      # Deploy Incremental Lambda
+      # ----------------------------
+      - name: Package incremental Lambda
+        run: |
+          cd ingestion
+          zip incremental.zip incremental_lambda.py
+
+      - name: Deploy incremental Lambda
+        run: |
+          aws lambda update-function-code \
+            --function-name sf-crime-incremental \
+            --zip-file fileb://ingestion/incremental.zip
