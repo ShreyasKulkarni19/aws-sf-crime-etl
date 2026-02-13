@@ -1,4 +1,5 @@
 import json
+from unicodedata import category
 import boto3
 import logging
 import os
@@ -175,7 +176,12 @@ def lambda_handler(event, context):
                 f"day={str(day).zfill(2)}/"
             )
 
+            if category is None or category == "":
+                category = "UNKNOWN"  # or "OTHER" or whatever default you want
+                logger.info(f"Using default category for record with missing category")
+
             safe_category = category.replace(" ", "_")
+
             filename = f"{safe_category}-{year}-{str(month).zfill(2)}-{str(day).zfill(2)}-{uuid.uuid4().hex}.json"
 
             curated_key = partition_path + filename
