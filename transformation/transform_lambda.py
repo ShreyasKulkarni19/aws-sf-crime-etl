@@ -177,10 +177,11 @@ def lambda_handler(event, context):
             )
 
             if category is None or category == "":
-                logger.warning(f"Skipping record with missing category: {record}")
-                continue
+                category = "UNKNOWN"  # or "OTHER" or whatever default you want
+                logger.info(f"Using default category for record with missing category")
 
             safe_category = category.replace(" ", "_")
+
             filename = f"{safe_category}-{year}-{str(month).zfill(2)}-{str(day).zfill(2)}-{uuid.uuid4().hex}.json"
 
             curated_key = partition_path + filename
