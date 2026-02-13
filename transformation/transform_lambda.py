@@ -26,29 +26,38 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 s3 = boto3.client("s3")
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table(os.environ["DYNAMODB_TABLE"])
+PIPELINE_NAME = os.environ.get("PIPELINE_NAME")
 
 # ----------------------------
 # Idempotency Helpers
 # ----------------------------
 
 def already_processed(raw_key):
-    marker_key = f"processed/{raw_key.split('/')[-1]}.done"
-    try:
-        s3.head_object(Bucket=CURATED_BUCKET, Key=marker_key)
-        logger.info(f"Marker exists: {marker_key}")
-        return True
-    except s3.exceptions.ClientError:
-        return False
+    response = table.get_item(
+        Key={
+            "pipeline_name": PIPELINE_NAME,
+            "record_type": f"processed_file#{raw_key}"
+        }
+    )
+    return "Item" in response
 
 
 def write_marker(raw_key):
-    marker_key = f"processed/{raw_key.split('/')[-1]}.done"
-    s3.put_object(
-        Bucket=CURATED_BUCKET,
-        Key=marker_key,
-        Body=b""
-    )
-    logger.info(f"Marker written: {marker_key}")
+    try:
+        table.put_item(
+            Item={
+                "pipeline_name": PIPELINE_NAME,
+                "record_type": f"processed_file#{raw_key}",
+                "processed_at": datetime.utcnow().isoformat()
+            },
+            ConditionExpression="attribute_not_exists(record_type)"
+        )
+        logger.info(f"DynamoDB marker written for {raw_key}")
+    except Exception as e:
+        logger.warning(f"File already processed or conditional write failed: {str(e)}")
+        raise
 
 # ----------------------------
 # Helper Functions
