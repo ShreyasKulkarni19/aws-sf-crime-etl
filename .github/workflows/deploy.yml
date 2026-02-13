@@ -23,13 +23,24 @@ jobs:
           role-to-assume: arn:aws:iam::104633066728:role/github-lambda-deployer
           aws-region: us-east-2
 
-      - name: Package backfill Lambda
-        run: |
-          cd ingestion
-          zip backfill.zip backfill_lambda.py
+      # - name: Package backfill Lambda
+      #   run: |
+      #     cd ingestion
+      #     zip backfill.zip backfill_lambda.py
 
-      - name: Deploy backfill Lambda
+      # - name: Deploy backfill Lambda
+      #   run: |
+      #     aws lambda update-function-code \
+      #       --function-name sf-crime-backfill \
+      #       --zip-file fileb://ingestion/backfill.zip
+
+      - name: Package transform Lambda
+        run: |
+          cd transformation
+          zip transform.zip transform_lambda.py
+
+      - name: Deploy transform Lambda
         run: |
           aws lambda update-function-code \
-            --function-name sf-crime-backfill \
-            --zip-file fileb://ingestion/backfill.zip
+            --function-name sf-crime-transform \
+            --zip-file fileb://transformation/transform.zip
