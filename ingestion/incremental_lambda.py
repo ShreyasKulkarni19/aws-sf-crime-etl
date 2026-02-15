@@ -81,6 +81,15 @@ def fetch_with_retries(url):
                 logger.error(f"API request failed after {MAX_RETRIES} attempts: {str(e)}")
     raise last_error
 
+
+def validate_required_fields(record):
+    required_fields = ["incident_datetime", "incident_id", "incident_number", "report_datetime"]
+    missing_fields = [field for field in required_fields if not record.get(field)]
+    
+    if missing_fields:
+        return False, missing_fields
+    return True, []
+
 # ----------------------------
 # Lambda Handler
 # ----------------------------
@@ -92,6 +101,8 @@ def lambda_handler(event, context):
     last_loaded_at, last_loaded_id = get_checkpoint()
     logger.info(f"Last checkpoint: {last_loaded_at}, id={last_loaded_id}")
 
+    total_valid = 0
+    total_invalid = 0
     offset = 0
     max_loaded_at = last_loaded_at
     max_loaded_id = last_loaded_id
@@ -132,22 +143,51 @@ def lambda_handler(event, context):
 
         logger.info(f"Fetched {len(data)} records")
 
+        # Separate valid and invalid records
+        valid_records = []
+        bad_records = []
+        
         for record in data:
-            ts = record.get("data_loaded_at")
-            record_id = record.get("incident_id")
-            if should_update_checkpoint(ts, record_id, max_loaded_at, max_loaded_id):
-                max_loaded_at = ts
-                max_loaded_id = record_id
+            is_valid, missing_fields = validate_required_fields(record)
+            
+            if is_valid:
+                valid_records.append(record)
+                total_valid += 1
+                
+                # Update checkpoint tracking
+                ts = record.get("data_loaded_at")
+                record_id = record.get("incident_id")
+                if should_update_checkpoint(ts, record_id, max_loaded_at, max_loaded_id):
+                    max_loaded_at = ts
+                    max_loaded_id = record_id
+            else:
+                bad_records.append(record)
+                total_invalid += 1
+                logger.warning(f"Invalid record - missing fields {missing_fields}: {record.get('incident_id', 'NO_ID')}")
 
         timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H-%M-%S")
-        s3_key = f"incremental/{timestamp}_{offset}.json"
-
-        s3.put_object(
-            Bucket=RAW_BUCKET,
-            Key=s3_key,
-            Body=json.dumps(data),
-            ContentType="application/json"
-        )
+        
+        # Write valid records to incremental/
+        if valid_records:
+            s3_key = f"incremental/{timestamp}_{offset}.json"
+            s3.put_object(
+                Bucket=RAW_BUCKET,
+                Key=s3_key,
+                Body=json.dumps(valid_records),
+                ContentType="application/json"
+            )
+            logger.info(f"Wrote {len(valid_records)} valid records to {s3_key}")
+        
+        # Write bad records to bad_data/
+        if bad_records:
+            bad_s3_key = f"bad_data/{timestamp}_{offset}.json"
+            s3.put_object(
+                Bucket=RAW_BUCKET,
+                Key=bad_s3_key,
+                Body=json.dumps(bad_records),
+                ContentType="application/json"
+            )
+            logger.info(f"Wrote {len(bad_records)} invalid records to {bad_s3_key}")
         offset += BATCH_SIZE
 
         if len(data) < BATCH_SIZE:
@@ -159,4 +199,10 @@ def lambda_handler(event, context):
     else:
         logger.info("No new records found")
 
-    return {"statusCode": 200}
+    logger.info(f"Ingestion complete. Valid: {total_valid}, Invalid: {total_invalid}")
+
+    return {
+        "statusCode": 200,
+        "valid_records": total_valid,
+        "invalid_records": total_invalid
+    }
