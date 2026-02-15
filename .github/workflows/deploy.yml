@@ -60,29 +60,29 @@ jobs:
             --zip-file fileb://ingestion/incremental.zip
             
       # -----------------------------
-      # Deploy Schema Init Lambda
+      # Deploy Schema Lambda
       # -----------------------------
-      - name: Package schema init Lambda
+      - name: Package schema Lambda
         run: |
           cd schema
-          zip schema_init.zip schema_lambda.py
+          zip schema.zip schema_lambda.py
 
-      - name: Deploy schema init Lambda
+      - name: Deploy schema Lambda
         run: |
           aws lambda update-function-code \
-            --function-name sf-crime-schema-init \
-            --zip-file fileb://schema/schema_init.zip
+            --function-name sf-crime-schema \
+            --zip-file fileb://schema/schema.zip
 
       # -----------------------------
-      # Deploy Schema Loader Lambda
+      # Deploy Schema Ingestion Lambda
       # -----------------------------
-      - name: Package schema loader Lambda
+      - name: Package schema ingestion Lambda
         run: |
           cd schema
-          zip schema_loader.zip schema_insertion_lambda.py
+          zip schema_ingestion.zip schema_insertion_lambda.py
 
-      - name: Deploy schema loader Lambda
+      - name: Deploy schema ingestion Lambda
         run: |
           aws lambda update-function-code \
-            --function-name sf-crime-schema-loader \
-            --zip-file fileb://schema/schema_loader.zip
+            --function-name sf-crime-schema-ingestion \
+            --zip-file fileb://schema/schema_ingestion.zip
