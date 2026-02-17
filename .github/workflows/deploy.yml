@@ -86,3 +86,11 @@ jobs:
           aws lambda update-function-code \
             --function-name sf-crime-schema-ingestion \
             --zip-file fileb://schema/schema_ingestion.zip
+
+            # -----------------------------
+      # Deploy Glue Transformation Script
+      # -----------------------------
+      - name: Upload Glue transformation script to S3
+        run: |
+          aws s3 cp glue/glue_transformation.py \
+            s3://sf-crime-artifacts/glue/glue_transformation.py
