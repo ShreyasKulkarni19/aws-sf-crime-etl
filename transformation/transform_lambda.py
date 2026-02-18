@@ -216,11 +216,13 @@ def lambda_handler(event, context):
             filename = f"{safe_category}-{year}-{str(month).zfill(2)}-{str(day).zfill(2)}-{uuid.uuid4().hex}.json"
 
             curated_key = partition_path + filename
+            
+            body = "\n".join(json.dumps(r) for r in records_list)
 
             s3.put_object(
                 Bucket=CURATED_BUCKET,
                 Key=curated_key,
-                Body=json.dumps(records_list),
+                Body=body,
                 ContentType="application/json"
             )
 
