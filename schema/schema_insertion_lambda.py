@@ -58,19 +58,28 @@ RAW_SCHEMA = {
 
 CURATED_SCHEMA = {
     "row_id": "STRING",
-    "incident_date": "DATE",
-    "incident_time": "TIME",
+
+    # ---- Incident Time Derived Fields ----
+    "incident_date": "STRING",          # ISO date: YYYY-MM-DD
+    "incident_time": "STRING",          # HH:MM:SS
     "incident_year": "INTEGER",
     "incident_month": "INTEGER",
     "incident_day": "INTEGER",
     "incident_hour": "INTEGER",
     "incident_quarter": "INTEGER",
     "incident_day_of_week": "STRING",
-    "report_date": "DATE",
-    "report_time": "TIME",
+
+    # ---- Report Time ----
+    "report_date": "STRING",
+    "report_time": "STRING",
+    "report_delay_hours": "FLOAT",
+
+    # ---- Identifiers ----
     "incident_id": "STRING",
     "incident_number": "STRING",
     "cad_number": "STRING",
+
+    # ---- Classification ----
     "report_type_code": "STRING",
     "report_type_description": "STRING",
     "incident_code": "STRING",
@@ -78,6 +87,8 @@ CURATED_SCHEMA = {
     "incident_subcategory": "STRING",
     "incident_description": "STRING",
     "resolution": "STRING",
+
+    # ---- Location ----
     "intersection": "STRING",
     "cnn": "STRING",
     "police_district": "STRING",
@@ -87,8 +98,13 @@ CURATED_SCHEMA = {
     "latitude": "FLOAT",
     "longitude": "FLOAT",
     "point": "GEOJSON",
-    "data_as_of": "TIMESTAMP",
-    "data_loaded_at": "TIMESTAMP",
+
+    # ---- Metadata ----
+    "data_as_of": "STRING",
+    "data_loaded_at": "STRING",
+    "filed_online": "BOOLEAN",
+
+    # ---- Business Flags ----
     "is_weekend": "BOOLEAN",
     "is_violent_crime": "BOOLEAN",
     "is_peak_hour": "BOOLEAN"
